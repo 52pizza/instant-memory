@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>瞬間記憶挑戰</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden; /* 防止捲動 */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .game-wrapper {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        #settings-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            padding: 1rem;
+        }
+        #settings-menu {
+            max-width: 500px;
+            width: 100%;
+            padding: 2rem;
+            border: 1px solid #ddd;
+            border-radius: 15px;
+            background-color: #f8f9fa;
+        }
+        #top-controls {
+            padding: 0.75rem;
+            background: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+            flex-shrink: 0;
+            z-index: 10;
+        }
+        #feedback-icon {
+            font-size: 1.2rem;
+            min-width: 45px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .feedback-correct { color: #28a745; }
+        .feedback-wrong { color: #dc3545; }
+        
+        #game-area {
+            flex-grow: 1;
+            position: relative;
+            width: 100%;
+        }
+        #flash-string {
+            position: absolute;
+            user-select: none;
+            display: none;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            transform: translate(-50%, -50%);
+        }
+    </style>
+</head>
+<body>
+
+<div class="game-wrapper">
+
+    <!-- 設定選單容器 -->
+    <div id="settings-container">
+        <div id="settings-menu">
+            <h3 class="text-center mb-4">瞬間記憶挑戰設定</h3>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label for="length" class="form-label">長度</label>
+                    <input type="number" class="form-control" id="length" value="5" min="1">
+                </div>
+                <div class="col-md-4">
+                    <label for="size" class="form-label">大小 (px)</label>
+                    <input type="number" class="form-control" id="size" value="16" min="1">
+                </div>
+                <div class="col-md-4">
+                    <label for="time" class="form-label">時間 (ms)</label>
+                    <input type="number" class="form-control" id="time" value="300" min="1">
+                </div>
+                <div class="col-12">
+                    <label class="form-label">內容</label>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input content-type" type="checkbox" id="use-numbers" value="numbers" checked>
+                        <label class="form-check-label" for="use-numbers">數字</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input content-type" type="checkbox" id="use-uppercase" value="uppercase">
+                        <label class="form-check-label" for="use-uppercase">大寫英文</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input content-type" type="checkbox" id="use-lowercase" value="lowercase">
+                        <label class="form-check-label" for="use-lowercase">小寫英文</label>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <label for="bgColor" class="form-label">底色</label>
+                    <input type="color" class="form-control form-control-color" id="bgColor" value="#ffffff" title="選擇背景顏色">
+                </div>
+                <div class="col-12">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="use-rotation" checked>
+                        <label class="form-check-label" for="use-rotation">旋轉</label>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="use-similar-color">
+                        <label class="form-check-label" for="use-similar-color">相近顏色</label>
+                    </div>
+                </div>
+            </div>
+            <div class="d-grid gap-2 mt-4">
+                <button id="start-btn" class="btn btn-primary">開始遊戲</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 遊戲主畫面 -->
+    <div id="game-main" class="d-none" style="height:100%; display:flex; flex-direction:column;">
+        <div id="top-controls">
+            <div id="stats" class="text-center mb-2">
+                答對：<span id="correct-count">0</span> / 
+                總題數：<span id="total-count">0</span> | 
+                答對率：<span id="accuracy">N/A</span>
+            </div>
+            <div id="answer-container" class="input-group mb-2 d-none">
+                <input type="text" id="answer-input" class="form-control" placeholder="輸入看到的字串...">
+                <button id="give-up-btn" class="btn btn-outline-secondary">放棄</button>
+                <span id="feedback-icon" class="input-group-text d-none"></span>
+                <button id="next-question-btn" class="btn btn-success d-none">下一題</button>
+            </div>
+        </div>
+        <div id="game-area">
+            <div id="flash-string"></div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // DOM 元素
+    const settingsContainer = document.getElementById('settings-container');
+    const gameMain = document.getElementById('game-main');
+    const gameArea = document.getElementById('game-area');
+    const startBtn = document.getElementById('start-btn');
+    
+    const lengthInput = document.getElementById('length');
+    const sizeInput = document.getElementById('size');
+    const timeInput = document.getElementById('time');
+    const contentTypeCheckboxes = document.querySelectorAll('.content-type');
+    const useNumbers = document.getElementById('use-numbers');
+    const bgColorInput = document.getElementById('bgColor');
+    const useRotation = document.getElementById('use-rotation');
+    const useSimilarColor = document.getElementById('use-similar-color');
+
+    const flashString = document.getElementById('flash-string');
+    const answerContainer = document.getElementById('answer-container');
+    const answerInput = document.getElementById('answer-input');
+    const giveUpBtn = document.getElementById('give-up-btn');
+    const nextQuestionBtn = document.getElementById('next-question-btn');
+    const feedbackIcon = document.getElementById('feedback-icon');
+    
+    const correctCountEl = document.getElementById('correct-count');
+    const totalCountEl = document.getElementById('total-count');
+    const accuracyEl = document.getElementById('accuracy');
+
+    // 遊戲狀態
+    let currentString = '';
+    let settings = {};
+    let stats = { correct: 0, total: 0 };
+    const CHARS = {
+        numbers: '0123456789',
+        uppercase: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+        lowercase: 'abcdefghijklmnopqrstuvwxyz'
+    };
+
+    // --- 顏色處理函式 ---
+    function hexToRgb(hex) {
+        let result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : null;
+    }
+    function rgbToHex(r, g, b) {
+        return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).padStart(6, '0');
+    }
+    function getLuminance(r, g, b) {
+        const a = [r, g, b].map(v => {
+            v /= 255;
+            return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+        });
+        return a[0] * 0.2126 + a[1] * 0.7154 + a[2] * 0.0722;
+    }
+    function getContrast(rgb1, rgb2) {
+        const lum1 = getLuminance(rgb1.r, rgb1.g, rgb1.b);
+        const lum2 = getLuminance(rgb2.r, rgb2.g, rgb2.b);
+        const brightest = Math.max(lum1, lum2);
+        const darkest = Math.min(lum1, lum2);
+        return (brightest + 0.05) / (darkest + 0.05);
+    }
+    function generateTextColor(bgHex) {
+        const bgRgb = hexToRgb(bgHex);
+        let textRgb;
+        if (settings.useSimilarColor) {
+            let attempts = 0;
+            do {
+                const r = Math.min(255, Math.max(0, bgRgb.r + (Math.random() - 0.5) * 120));
+                const g = Math.min(255, Math.max(0, bgRgb.g + (Math.random() - 0.5) * 120));
+                const b = Math.min(255, Math.max(0, bgRgb.b + (Math.random() - 0.5) * 120));
+                textRgb = { r: Math.round(r), g: Math.round(g), b: Math.round(b) };
+                attempts++;
+            } while ((getContrast(bgRgb, textRgb) > 3.0 || getContrast(bgRgb, textRgb) < 1.5) && attempts < 100);
+        } else {
+            let attempts = 0;
+             do {
+                const r = Math.floor(Math.random() * 256);
+                const g = Math.floor(Math.random() * 256);
+                const b = Math.floor(Math.random() * 256);
+                textRgb = { r, g, b };
+                attempts++;
+            } while (getContrast(bgRgb, textRgb) < 4.5 && attempts < 100);
+        }
+        if (textRgb.r === bgRgb.r && textRgb.g === bgRgb.g && textRgb.b === bgRgb.b) {
+             textRgb.r = (textRgb.r + 10) % 256;
+        }
+        return rgbToHex(textRgb.r, textRgb.g, textRgb.b);
+    }
+
+    // --- 遊戲邏輯函式 ---
+    function generateRandomString() {
+        let availableChars = Array.from(contentTypeCheckboxes).filter(cb => cb.checked).map(cb => CHARS[cb.value]).join('');
+        if (availableChars === '') {
+            availableChars = CHARS.numbers;
+            useNumbers.checked = true;
+        }
+        let result = '';
+        for (let i = 0; i < settings.length; i++) {
+            result += availableChars.charAt(Math.floor(Math.random() * availableChars.length));
+        }
+        return result;
+    }
+    
+    function updateStats() {
+        correctCountEl.textContent = stats.correct;
+        totalCountEl.textContent = stats.total;
+        accuracyEl.textContent = stats.total > 0 ? `${((stats.correct / stats.total) * 100).toFixed(1)}%` : 'N/A';
+    }
+
+    function checkAnswer(isGiveUp = false) {
+        answerInput.blur();
+        answerInput.disabled = true;
+        giveUpBtn.classList.add('d-none');
+
+        const userAnswer = answerInput.value;
+        const isCorrect = !isGiveUp && userAnswer === currentString;
+        
+        stats.total++;
+        if (isCorrect) {
+            stats.correct++;
+            feedbackIcon.innerHTML = '&#10004;';
+            feedbackIcon.className = 'input-group-text feedback-correct';
+        } else {
+            feedbackIcon.innerHTML = '&#10006;';
+            feedbackIcon.className = 'input-group-text feedback-wrong';
+        }
+        
+        updateStats();
+        
+        // 重新顯示隱藏的字串作為答案
+        flashString.style.display = 'block';
+
+        // 顯示結果和下一題按鈕
+        feedbackIcon.classList.remove('d-none');
+        nextQuestionBtn.classList.remove('d-none');
+    }
+
+    function nextQuestion() {
+        // 隱藏上一題的結果
+        feedbackIcon.classList.add('d-none');
+        nextQuestionBtn.classList.add('d-none');
+        flashString.style.display = 'none';
+
+        // 重設輸入框
+        answerInput.value = '';
+        answerInput.disabled = false;
+        giveUpBtn.classList.remove('d-none');
+
+        // 產生新題目
+        currentString = generateRandomString();
+        flashString.textContent = currentString;
+        flashString.style.fontSize = `${settings.size}px`;
+        flashString.style.color = generateTextColor(settings.bgColor);
+        
+        const angle = settings.useRotation ? Math.random() * 360 : 0;
+        flashString.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
+
+        // 確保位置在可視範圍內
+        flashString.style.display = 'block'; // 先顯示以取得尺寸
+        const rect = flashString.getBoundingClientRect();
+        const randomTop = rect.height / 2 + Math.random() * (gameArea.clientHeight - rect.height);
+        const randomLeft = rect.width / 2 + Math.random() * (gameArea.clientWidth - rect.width);
+        flashString.style.top = `${randomTop}px`;
+        flashString.style.left = `${randomLeft}px`;
+        flashString.style.display = 'none'; // 準備好後隱藏
+
+        // 開始閃爍
+        setTimeout(() => {
+            flashString.style.display = 'block';
+            setTimeout(() => {
+                flashString.style.display = 'none';
+                answerContainer.classList.remove('d-none');
+                answerInput.focus();
+            }, settings.time);
+        }, 100);
+    }
+
+    function startGame() {
+        const selectedContentTypes = Array.from(contentTypeCheckboxes).filter(cb => cb.checked).map(cb => cb.value);
+        settings = {
+            length: parseInt(lengthInput.value) || 5,
+            size: parseInt(sizeInput.value) || 16,
+            time: parseInt(timeInput.value) || 300,
+            content: selectedContentTypes.length > 0 ? selectedContentTypes : ['numbers'],
+            bgColor: bgColorInput.value || '#ffffff',
+            useRotation: useRotation.checked,
+            useSimilarColor: useSimilarColor.checked,
+        };
+        
+        const params = new URLSearchParams(window.location.search);
+        Object.keys(settings).forEach(key => {
+            const value = Array.isArray(settings[key]) ? settings[key].join(',') : settings[key];
+            params.set(key, value);
+        });
+        window.history.pushState({}, '', `?${params.toString()}`);
+        
+        settingsContainer.classList.add('d-none');
+        gameMain.classList.remove('d-none');
+        gameArea.style.backgroundColor = settings.bgColor;
+        
+        stats = { correct: 0, total: 0 };
+        updateStats();
+        nextQuestion();
+    }
+    
+    function applySettingsFromURL() {
+        const params = new URLSearchParams(window.location.search);
+        if (!params.has('length')) return;
+        
+        lengthInput.value = parseInt(params.get('length')) > 0 ? params.get('length') : '5';
+        sizeInput.value = parseInt(params.get('size')) > 0 ? params.get('size') : '16';
+        timeInput.value = parseInt(params.get('time')) > 0 ? params.get('time') : '300';
+        
+        const content = params.get('content');
+        contentTypeCheckboxes.forEach(cb => cb.checked = false);
+        if (content) {
+            content.split(',').forEach(type => {
+                const cb = document.getElementById(`use-${type.replace(' ','')}`);
+                if (cb) cb.checked = true;
+            });
+        }
+        if (Array.from(contentTypeCheckboxes).every(cb => !cb.checked)) useNumbers.checked = true;
+
+        const bgColor = params.get('bgColor');
+        bgColorInput.value = /^#[0-9A-F]{6}$/i.test(bgColor) ? bgColor : '#ffffff';
+        useRotation.checked = params.get('useRotation') === 'true';
+        useSimilarColor.checked = params.get('useSimilarColor') === 'true';
+    }
+
+    // --- 事件監聽 ---
+    startBtn.addEventListener('click', startGame);
+    giveUpBtn.addEventListener('click', () => checkAnswer(true));
+    nextQuestionBtn.addEventListener('click', nextQuestion);
+    answerInput.addEventListener('input', () => {
+        if (answerInput.value.length >= settings.length) checkAnswer();
+    });
+    answerInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && answerInput.value.length > 0) checkAnswer();
+    });
+
+    // 初始化
+    applySettingsFromURL();
+});
+</script>
+
+</body>
+</html>
