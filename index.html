@@ -74,7 +74,7 @@
     <!-- 設定選單容器 -->
     <div id="settings-container">
         <div id="settings-menu">
-            <h3 class="text-center mb-4">瞬間記憶挑戰設定</h3>
+            <h3 class="text-center mb-4">瞬間記憶挑戰</h3>
             <div class="row g-3">
                 <div class="col-md-4">
                     <label for="length" class="form-label">長度</label>
@@ -292,6 +292,13 @@ document.addEventListener('DOMContentLoaded', () => {
         answerInput.value = '';
         answerInput.disabled = false;
         giveUpBtn.classList.remove('d-none');
+        
+        // 根據內容設定手機鍵盤模式
+        if (settings.content.length === 1 && settings.content[0] === 'numbers') {
+            answerInput.type = 'tel';
+        } else {
+            answerInput.type = 'text';
+        }
 
         // 產生新題目
         currentString = generateRandomString();
